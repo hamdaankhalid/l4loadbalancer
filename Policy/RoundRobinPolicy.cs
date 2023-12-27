@@ -22,9 +22,10 @@ public class RoundRobinPolicy : IPolicy
     public string? GetTarget()
     {
         ReadOnlyCollection<string> serverPool = this._topologyManagement.GetPool();
-		if (serverPool.Count < 1) {
-			return null;			
-		}
+        if (serverPool.Count < 1)
+        {
+            return null;
+        }
         this._counter = (this._counter + 1) % serverPool.Count;
         string server = serverPool[this._counter];
         return server;

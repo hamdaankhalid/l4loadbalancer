@@ -151,6 +151,7 @@ class TcpServer
             {
                 if (targetServerAddr != null)
                 {
+                    Console.WriteLine($"Retiring server from active pool: {targetServerAddr}");
                     this._topology.Retire(targetServerAddr);
                 }
             }

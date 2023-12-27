@@ -11,7 +11,7 @@ namespace loadbalancer;
 public class TopologyManagement
 {
     // retirement time period
-    private static readonly int TimePeriod = 2000;
+    private static readonly int _TimePeriod = 10;
 
     private readonly ReaderWriterLockSlim _rwLock = new ReaderWriterLockSlim();
 
@@ -43,7 +43,7 @@ public class TopologyManagement
         List<string>? serverPool = JsonSerializer.Deserialize<List<string>>(serverPoolStr);
         if (serverPool == null)
         {
-            throw new Exception("failed to deser serverPool");
+            throw new Exception("Failed to deser serverPool");
         }
         this._serverPool = serverPool;
     }
@@ -54,8 +54,8 @@ public class TopologyManagement
         ISubscriber sub = this._redis.GetSubscriber();
 
         RedisChannel addServerChan = RedisChannel.Literal("addServer");
-		
-		Action<RedisChannel, RedisValue> addServerHandler = (_, message) =>
+
+        Action<RedisChannel, RedisValue> addServerHandler = (_, message) =>
         {
             this._rwLock.EnterWriteLock();
             try
@@ -76,7 +76,7 @@ public class TopologyManagement
 
         RedisChannel rmServerChan = RedisChannel.Literal("removeServer");
 
-		Action<RedisChannel, RedisValue> rmServerHandler = (_, message) =>
+        Action<RedisChannel, RedisValue> rmServerHandler = (_, message) =>
         {
             this._rwLock.EnterWriteLock();
             try
@@ -113,7 +113,7 @@ public class TopologyManagement
         };
 
         await sub.SubscribeAsync(rmServerChan, rmServerHandler);
-	}
+    }
 
     // Read locking is only there to safeguard against contention
     public ReadOnlyCollection<string> GetPool()
@@ -134,8 +134,8 @@ public class TopologyManagement
     {
         try
         {
-            bool found = false;
             this._rwLock.EnterWriteLock();
+            bool found = false;
             // find the serverAddr in active pool
             for (int i = 0; i < this._serverPool.Count; i++)
             {
@@ -146,6 +146,7 @@ public class TopologyManagement
                     break;
                 }
             }
+
             if (!found)
             {
                 return;
@@ -155,12 +156,15 @@ public class TopologyManagement
 
             // add it to retirement zone for a little time
             // after which it should be added again into the active pool
-            TimerCallback timerCallback = async (_serverAddr) =>
+            Func<string, Task> timedCallback = async (serverAddr) =>
             {
                 try
                 {
+                    await Task.Delay(TimeSpan.FromSeconds(TopologyManagement._TimePeriod));
+
+                    Console.WriteLine($"Adding server from retirement zone back into active pool {serverAddr}");
+
                     this._rwLock.EnterWriteLock();
-                    string serverAddr = (string)_serverAddr!;
                     int foundRecommisionAt = -1;
                     // find the index of the serverAddr in Retirementr zone
                     // if index is found then we need to remove it from retirement
@@ -184,8 +188,12 @@ public class TopologyManagement
                     {
                         this._retirementZone.RemoveAt(foundRecommisionAt);
                         this._serverPool.Add(serverAddr);
-                        await this._db.StringSetAsync("serverPool", JsonSerializer.Serialize(this._serverPool));
+                        this._db.StringSet("serverPool", JsonSerializer.Serialize(this._serverPool));
                     }
+                }
+                catch (Exception)
+                {
+                    // Safely ignore all the exceptions in write back for fire and forget
                 }
                 finally
                 {
@@ -193,7 +201,7 @@ public class TopologyManagement
                 }
             };
 
-            Timer timer = new Timer(timerCallback, serverAddr, TopologyManagement.TimePeriod, Timeout.Infinite);
+            timedCallback(serverAddr);
             this._db.StringSet("serverPool", JsonSerializer.Serialize(this._serverPool));
         }
         finally

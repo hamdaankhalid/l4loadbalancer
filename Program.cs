@@ -13,8 +13,6 @@ class Program
 
         // watch for changes in server pool config in redis
         await topology.WatchTopology();
-		
-		Console.WriteLine("Meo meow");
 
         // TODO: should pick the policy from config file
         RoundRobinPolicy lbPolicy = new RoundRobinPolicy(topology);
@@ -22,6 +20,6 @@ class Program
         // TODO: should pick proxy IP and Port from config file
         TcpServer proxy = new TcpServer("127.0.0.1", 8080, lbPolicy, topology);
 
-		await proxy.Listen();
+        await proxy.Listen();
     }
 }
