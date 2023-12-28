@@ -73,8 +73,10 @@ class TcpServer
             using (NetworkStream clientStream = client.GetStream())
             using (NetworkStream targetStream = target.GetStream())
             {
-                Task clientToTarget = this._forwardData(clientStream, targetStream);
-                Task targetToClient = this._forwardData(targetStream, clientStream);
+                // pipe / read write connect the streams
+                Task clientToTarget = clientStream.CopyToAsync(targetStream);
+                Task targetToClient = targetStream.CopyToAsync(clientStream);
+
                 // when either tasks terminate we need to close the proxy channel
                 await Task.WhenAny(clientToTarget, targetToClient);
             }
@@ -91,25 +93,6 @@ class TcpServer
             {
                 target.Close();
             }
-        }
-    }
-
-    private async Task _forwardData(NetworkStream source, NetworkStream target)
-    {
-        try
-        {
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-
-            while ((bytesRead = await source.ReadAsync(buffer, 0, buffer.Length)) > 0)
-            {
-                await target.WriteAsync(buffer, 0, bytesRead);
-            }
-        }
-        catch (Exception ex)
-        {
-            // log and ignore
-            Console.WriteLine($"Forwarding data closed: {ex.Message}");
         }
     }
 
